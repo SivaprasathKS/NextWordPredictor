@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NextWord — AI Prediction</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface2: #1a1a26;
+      --border: #2a2a3e;
+      --accent: #7c6bff;
+      --accent2: #ff6b9d;
+      --accent3: #6bffda;
+      --text: #e8e8f0;
+      --muted: #6b6b88;
+      --chip-bg: #1e1e30;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(124,107,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,107,255,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glow orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.18;
+    }
+    .orb-1 { width: 500px; height: 500px; background: var(--accent); top: -150px; left: -100px; animation: drift1 12s ease-in-out infinite alternate; }
+    .orb-2 { width: 400px; height: 400px; background: var(--accent2); bottom: -100px; right: -80px; animation: drift2 15s ease-in-out infinite alternate; }
+
+    @keyframes drift1 { to { transform: translate(60px, 80px); } }
+    @keyframes drift2 { to { transform: translate(-60px, -60px); } }
+
+    /* Layout */
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 24px 80px;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      margin-bottom: 56px;
+      animation: fadeUp 0.7s ease both;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 6px 16px;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 24px;
+    }
+
+    .logo-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse { 0%,100% { opacity:1; transform: scale(1); } 50% { opacity:0.5; transform: scale(1.4); } }
+
+    h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(42px, 6vw, 72px);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--text) 30%, var(--accent) 70%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: 0.02em;
+    }
+
+    /* Card */
+    .card {
+      width: 100%;
+      max-width: 720px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 36px;
+      backdrop-filter: blur(12px);
+      animation: fadeUp 0.8s 0.15s ease both;
+    }
+
+    .card-label {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    /* Text area */
+    .textarea-wrap {
+      position: relative;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 15px;
+      line-height: 1.7;
+      resize: vertical;
+      min-height: 140px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(124,107,255,0.12);
+    }
+
+    textarea::placeholder { color: var(--muted); }
+
+    .char-count {
+      position: absolute;
+      bottom: 12px;
+      right: 14px;
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0.6;
+    }
+
+    /* Controls row */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn-predict {
+      flex: 1;
+      min-width: 160px;
+      background: var(--accent);
+      color: #fff;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.05em;
+      border: none;
+      border-radius: 10px;
+      padding: 14px 28px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-predict:hover {
+      background: #9585ff;
+      box-shadow: 0 0 24px rgba(124,107,255,0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-predict:active { transform: translateY(0); }
+
+    .btn-predict.loading::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+      animation: shimmer 1s linear infinite;
+    }
+
+    @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+    .topk-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      padding: 8px 12px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    select:focus { border-color: var(--accent); }
+
+    /* Suggestions */
+    .suggestions-section {
+      margin-top: 32px;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .suggestions-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .tag {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: rgba(124,107,255,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(124,107,255,0.25);
+      border-radius: 6px;
+      padding: 3px 9px;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--chip-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+      animation: popIn 0.3s ease both;
+    }
+
+    .chip:hover {
+      border-color: var(--accent);
+      background: rgba(124,107,255,0.1);
+      transform: translateY(-2px);
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.88) translateY(6px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .chip-word {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    .chip-bar-wrap {
+      width: 60px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .chip-bar {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--accent), var(--accent3));
+      transition: width 0.5s ease;
+    }
+
+    .chip-pct {
+      font-size: 11px;
+      color: var(--muted);
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* Error */
+    .error {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: rgba(255,107,107,0.08);
+      border: 1px solid rgba(255,107,107,0.25);
+      border-radius: 10px;
+      color: #ff8080;
+      font-size: 13px;
+    }
+
+    /* History */
+    .history-section {
+      width: 100%;
+      max-width: 720px;
+      margin-top: 28px;
+      animation: fadeUp 0.6s 0.3s ease both;
+    }
+
+    .history-label {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .history-item:hover { border-color: var(--accent); }
+
+    .history-input { color: var(--muted); }
+    .history-result { color: var(--accent3); font-family: 'Syne', sans-serif; font-weight: 600; }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(18px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    /* API status */
+    .api-url-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .api-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 8px 12px;
+      outline: none;
+    }
+    .api-input:focus { border-color: var(--accent); color: var(--text); }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .status-dot.ok { background: var(--accent3); box-shadow: 0 0 8px var(--accent3); }
+    .status-dot.err { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+  </style>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <div class="wrapper">
+    <header>
+      <div class="logo-badge">GPT-2 · Powered</div>
+      <h1>NextWord</h1>
+      <p class="subtitle">AI-driven next word prediction — type, predict, compose.</p>
+    </header>
+
+    <div class="card" id="main-card">
+      <!-- API URL row -->
+      <div class="api-url-row">
+        <span class="status-dot" id="status-dot"></span>
+        <input class="api-input" id="api-url" type="text" value="http://localhost:8000" placeholder="Backend URL" />
+        <button onclick="checkHealth()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;padding:7px 12px;border-radius:8px;cursor:pointer;">ping</button>
+      </div>
+
+      <div class="card-label">Your text</div>
+      <div class="textarea-wrap">
+        <textarea id="input-text" placeholder="Start typing… e.g. 'The future of artificial'" oninput="updateChar()" maxlength="500"></textarea>
+        <span class="char-count" id="char-count">0 / 500</span>
+      </div>
+
+      <div class="controls">
+        <button class="btn-predict" id="btn" onclick="predict()">Predict →</button>
+        <div class="topk-wrap">
+          <span>Top</span>
+          <select id="topk">
+            <option value="3">3</option>
+            <option value="5" selected>5</option>
+            <option value="8">8</option>
+            <option value="10">10</option>
+          </select>
+          <span>words</span>
+        </div>
+      </div>
+
+      <div id="error-box" class="error" style="display:none;"></div>
+
+      <div class="suggestions-section" id="suggestions-section" style="display:none;">
+        <div class="suggestions-header">
+          <div class="card-label" style="margin:0;">Suggestions</div>
+          <span class="tag">click to append</span>
+        </div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </div>
+
+    <div class="history-section" id="history-section" style="display:none;">
+      <div class="history-label">Recent predictions</div>
+      <div class="history-list" id="history-list"></div>
+    </div>
+  </div>
+
+  <script>
+    const history = [];
+
+    function getApiBase() {
+      return document.getElementById('api-url').value.replace(/\/$/, '');
+    }
+
+    function updateChar() {
+      const t = document.getElementById('input-text').value;
+      document.getElementById('char-count').textContent = `${t.length} / 500`;
+    }
+
+    async function checkHealth() {
+      const dot = document.getElementById('status-dot');
+      try {
+        const res = await fetch(`${getApiBase()}/health`);
+        if (res.ok) { dot.className = 'status-dot ok'; }
+        else { dot.className = 'status-dot err'; }
+      } catch {
+        dot.className = 'status-dot err';
+      }
+    }
+
+    async function predict() {
+      const text = document.getElementById('input-text').value.trim();
+      if (!text) return;
+
+      const btn = document.getElementById('btn');
+      const errorBox = document.getElementById('error-box');
+      const topK = parseInt(document.getElementById('topk').value);
+
+      btn.textContent = 'Thinking…';
+      btn.classList.add('loading');
+      btn.disabled = true;
+      errorBox.style.display = 'none';
+      document.getElementById('suggestions-section').style.display = 'none';
+
+      try {
+        const res = await fetch(`${getApiBase()}/predict`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, top_k: topK }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        renderChips(data.suggestions, text);
+
+        // history
+        if (data.suggestions.length) {
+          addHistory(text, data.suggestions[0].word);
+        }
+
+      } catch (e) {
+        errorBox.textContent = `Error: ${e.message}`;
+        errorBox.style.display = 'block';
+      } finally {
+        btn.textContent = 'Predict →';
+        btn.classList.remove('loading');
+        btn.disabled = false;
+      }
+    }
+
+    function renderChips(suggestions, inputText) {
+      const section = document.getElementById('suggestions-section');
+      const chips = document.getElementById('chips');
+      chips.innerHTML = '';
+
+      const maxScore = Math.max(...suggestions.map(s => s.score));
+
+      suggestions.forEach((s, i) => {
+        const pct = Math.round((s.score / maxScore) * 100);
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.style.animationDelay = `${i * 60}ms`;
+        chip.innerHTML = `
+          <span class="chip-word">${s.word}</span>
+          <div class="chip-bar-wrap">
+            <div class="chip-bar" style="width:${pct}%"></div>
+          </div>
+          <span class="chip-pct">${(s.score * 100).toFixed(1)}%</span>
+        `;
+        chip.onclick = () => appendWord(s.word);
+        chips.appendChild(chip);
+      });
+
+      section.style.display = 'block';
+    }
+
+    function appendWord(word) {
+      const ta = document.getElementById('input-text');
+      ta.value = ta.value.trimEnd() + ' ' + word;
+      updateChar();
+      ta.focus();
+      // auto-predict
+      predict();
+    }
+
+    function addHistory(input, topWord) {
+      const trimmed = input.length > 40 ? '…' + input.slice(-37) : input;
+      history.unshift({ input: trimmed, word: topWord });
+      if (history.length > 5) history.pop();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const section = document.getElementById('history-section');
+      const list = document.getElementById('history-list');
+      list.innerHTML = '';
+
+      history.forEach(h => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.innerHTML = `<span class="history-input">"${h.input}"</span><span class="history-result">→ ${h.word}</span>`;
+        item.onclick = () => {
+          document.getElementById('input-text').value = h.input;
+          updateChar();
+          predict();
+        };
+        list.appendChild(item);
+      });
+
+      section.style.display = history.length ? 'block' : 'none';
+    }
+
+    // Ctrl/Cmd + Enter to predict
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') predict();
+    });
+
+    // Initial health check
+    checkHealth();
+  </script>
+</body>
+</html>
